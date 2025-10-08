@@ -1,0 +1,61 @@
+.game-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-world {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  transform-origin: center center;
+}
+
+.background-image {
+  position: absolute;
+  width: auto;
+  height: auto;
+  min-width: 100%;
+  min-height: 100%;
+  display: block;
+}
+
+.character-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+}
+
+.character-shadow {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 210px;
+  height: 80px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.character {
+  position: relative;
+  z-index: 2;
+  display: block;
+  transition: transform 0.1s ease;
+}
+
+.character-facing-left {
+  transform: scaleX(-1);
+}
+
+.character-facing-right {
+  transform: none;
+}

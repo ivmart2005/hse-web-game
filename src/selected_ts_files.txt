@@ -1,0 +1,907 @@
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Game\Game.tsx
+================================================================================
+import React, { useState } from 'react';
+import { useGameScale, useKeyboardControls, useCollisionSystem, useAnimation, useCamera, useGameLoop } from '../../hooks';
+import { GAME_CONFIG, ASSET_PATHS } from '../../constants';
+import type { Position } from '../../types';
+import './Game.css';
+
+const Game: React.FC = () => {
+  const [position, setPosition] = useState<Position>({
+    x: GAME_CONFIG.BACKGROUND.INITIAL_X,
+    y: GAME_CONFIG.BACKGROUND.INITIAL_Y
+  });
+  const [isWalking, setIsWalking] = useState(false);
+
+  const { scale, containerRef } = useGameScale();
+  const { keys, direction } = useKeyboardControls();
+  const { checkCollision, isLoaded } = useCollisionSystem();
+  const { currentFrame } = useAnimation(isWalking);
+  const { zoom, updateCamera } = useCamera();
+
+  const handleGameUpdate = (newPosition: Position, velocity: { x: number; y: number }, isMoving: boolean) => {
+    setPosition(newPosition);
+    setIsWalking(isMoving);
+    updateCamera(velocity);
+  };
+
+  useGameLoop({
+    keys,
+    onUpdate: handleGameUpdate,
+    checkCollision: isLoaded ? checkCollision : () => false
+  });
+
+  const getCurrentImage = () => {
+    if (!isWalking) {
+      return ASSET_PATHS.CHARACTER.STATIC;
+    }
+    return ASSET_PATHS.CHARACTER.FRAME(currentFrame);
+  };
+
+  const combinedScale = scale * zoom;
+
+  return (
+    <div ref={containerRef} className="game-container">
+      <div 
+        className="game-world"
+        style={{
+          width: `${GAME_CONFIG.WIDTH}px`,
+          height: `${GAME_CONFIG.HEIGHT}px`,
+          transform: `scale(${combinedScale})`
+        }}
+      >
+        <img
+          src={ASSET_PATHS.BACKGROUND}
+          alt="game background"
+          className="background-image"
+          style={{
+            top: position.y,
+            left: position.x
+          }}
+        />
+
+        <div className="character-container">
+          <div className="character-shadow" />
+          <img
+            src={getCurrentImage()}
+            alt="character"
+            className={`character ${direction === 'left' ? 'character-facing-left' : 'character-facing-right'}`}
+            style={{
+              width: `${GAME_CONFIG.CHARACTER.WIDTH}px`,
+              height: `${GAME_CONFIG.CHARACTER.HEIGHT}px`
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Game;
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Game\index.ts
+================================================================================
+export { default } from './Game';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Game-Устаревший.tsx
+================================================================================
+import React, { useState, useEffect, useRef } from 'react';
+import './Game.css';
+
+interface Keys {
+  w: boolean;
+  a: boolean;
+  s: boolean;
+  d: boolean;
+}
+
+interface Velocity {
+  x: number;
+  y: number;
+}
+
+// хук для расчёта масштаба
+const useGameScale = (gameWidth: number, gameHeight: number) => {
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (containerRef.current) {
+        const container = containerRef.current;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        
+        if (containerWidth > 0 && containerHeight > 0 && gameWidth > 0 && gameHeight > 0) {
+          const scaleX = containerWidth / gameWidth;
+          const scaleY = containerHeight / gameHeight;
+          const newScale = Math.min(scaleX, scaleY);
+          
+          setScale(newScale);
+        }
+      }
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
+  return { scale, containerRef };
+};
+
+const Game: React.FC = () => {
+  const [position, setPosition] = useState({ x: -180, y: -250 });
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [isWalking, setIsWalking] = useState(false);
+  const [facingDirection, setFacingDirection] = useState<'right' | 'left'>('right');
+  const [cameraZoom, setCameraZoom] = useState(1);
+
+  // Константы игры
+  const acceleration = 0.15;
+  const deceleration = 0.1;
+  const maxSpeed = 5;
+  const baseZoom = 1;
+  const maxZoom = 1.2;
+  const zoomSpeed = 0.002;
+  const frames = [1, 2, 3, 4, 5, 6, 10];
+  const GAME_WIDTH = 1600;
+  const GAME_HEIGHT = 600;
+  const characterWidth = 280;
+  const characterHeight = 460;
+
+  const keys = useRef<Keys>({ w: false, a: false, s: false, d: false });
+  const velocity = useRef<Velocity>({ x: 0, y: 0 });
+  const animationFrameId = useRef<number | null>(null);
+  const walkAnimationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameLoopRunning = useRef(false);
+
+  // Маска коллизий
+  const collisionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const collisionContextRef = useRef<CanvasRenderingContext2D | null>(null);
+  const maskImageRef = useRef<HTMLImageElement | null>(null);
+  const maskLoadedRef = useRef(false);
+  const backgroundSizeRef = useRef({ width: 0, height: 0 });
+
+  const { scale, containerRef } = useGameScale(GAME_WIDTH, GAME_HEIGHT);
+
+  // Проверка коллизий
+  const checkCollision = (x: number, y: number): boolean => {
+    if (!collisionContextRef.current || !maskLoadedRef.current) {
+      return false;
+    }
+
+    try {
+      const maskWidth = collisionCanvasRef.current?.width || 0;
+      const maskHeight = collisionCanvasRef.current?.height || 0;
+      const bgWidth = backgroundSizeRef.current.width;
+      const bgHeight = backgroundSizeRef.current.height;
+      
+      if (maskWidth === 0 || maskHeight === 0 || bgWidth === 0 || bgHeight === 0) {
+        return false;
+      }
+      
+      const shadowCenterWorldX = GAME_WIDTH / 2;
+      const shadowCenterWorldY = GAME_HEIGHT / 2 + characterHeight / 2 - 10;
+      const bgX = shadowCenterWorldX - x;
+      const bgY = shadowCenterWorldY - y;
+      const scaleX = maskWidth / bgWidth;
+      const scaleY = maskHeight / bgHeight;
+      const maskX = Math.floor(bgX * scaleX);
+      const maskY = Math.floor(bgY * scaleY);
+      
+      if (maskX >= 0 && maskX < maskWidth && maskY >= 0 && maskY < maskHeight) {
+        const pixelData = collisionContextRef.current.getImageData(maskX, maskY, 1, 1).data;
+        const [r, g, b] = pixelData;
+        const isWhite = r === 255 && g === 255 && b === 255;
+        return !isWhite;
+      } else {
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    const loadMask = () => {
+      const maskImage = new Image();
+      maskImageRef.current = maskImage;
+      maskImage.onload = () => {
+        const maskWidth = maskImage.naturalWidth;
+        const maskHeight = maskImage.naturalHeight;
+        const canvas = document.createElement('canvas');
+        canvas.width = maskWidth;
+        canvas.height = maskHeight;
+        collisionCanvasRef.current = canvas;
+        const context = canvas.getContext('2d');
+        
+        if (!context) return;
+        
+        collisionContextRef.current = context;
+        collisionContextRef.current.drawImage(maskImage, 0, 0, maskWidth, maskHeight);
+        maskLoadedRef.current = true;
+      };
+      maskImage.src = '/assets/images/background_mask.png';
+    };
+
+    const bgImage = new Image();
+    bgImage.onload = () => {
+      backgroundSizeRef.current = {
+        width: bgImage.naturalWidth,
+        height: bgImage.naturalHeight
+      };
+      loadMask();
+    };
+    bgImage.src = '/assets/images/background.png';
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'd', 'a', 's', 'w', 'в', 'ы', 'ф', 'ц'].includes(event.key)) {
+        event.preventDefault();
+      }
+      
+      switch (event.key.toLowerCase()) {
+        case 'arrowright':
+        case 'd':
+        case 'в':
+          keys.current.d = true;
+          setFacingDirection('right');
+          break;
+        case 'arrowleft':
+        case 'a':
+        case 'ф':
+          keys.current.a = true;
+          setFacingDirection('left');
+          break;
+        case 'arrowdown':
+        case 's':
+        case 'ы':
+          keys.current.s = true;
+          keys.current.w = false;
+          break;
+        case 'arrowup':
+        case 'w':
+        case 'ц':
+          keys.current.w = true;
+          keys.current.s = false;
+          break;
+        default:
+          break;
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      switch (event.key.toLowerCase()) {
+        case 'arrowright':
+        case 'd':
+        case 'в':
+          keys.current.d = false;
+          break;
+        case 'arrowleft':
+        case 'a':
+        case 'ф':
+          keys.current.a = false;
+          break;
+        case 'arrowdown':
+        case 's':
+        case 'ы':
+          keys.current.s = false;
+          break;
+        case 'arrowup':
+        case 'w':
+        case 'ц':
+          keys.current.w = false;
+          break;
+        default:
+          break;
+      }
+    };
+
+    const gameLoop = () => {
+      if (!gameLoopRunning.current) return;
+      
+      setPosition(prev => {
+        let targetVelocityX = 0;
+        let targetVelocityY = 0;
+        
+        if (keys.current.d) targetVelocityX = -maxSpeed;
+        if (keys.current.a) targetVelocityX = maxSpeed;
+        if (keys.current.s) targetVelocityY = -maxSpeed;
+        if (keys.current.w) targetVelocityY = maxSpeed;
+
+        // Плавное ускорение по горизонтали
+        if (targetVelocityX !== 0) {
+          if (Math.abs(velocity.current.x) < Math.abs(targetVelocityX)) {
+            velocity.current.x += Math.sign(targetVelocityX) * acceleration;
+          }
+        } else {
+          if (velocity.current.x > 0) {
+            velocity.current.x = Math.max(0, velocity.current.x - deceleration);
+          } else if (velocity.current.x < 0) {
+            velocity.current.x = Math.min(0, velocity.current.x + deceleration);
+          }
+        }
+
+        // Плавное ускорение по вертикали
+        if (targetVelocityY !== 0) {
+          if (Math.abs(velocity.current.y) < Math.abs(targetVelocityY)) {
+            velocity.current.y += Math.sign(targetVelocityY) * acceleration;
+          }
+        } else {
+          if (velocity.current.y > 0) {
+            velocity.current.y = Math.max(0, velocity.current.y - deceleration);
+          } else if (velocity.current.y < 0) {
+            velocity.current.y = Math.min(0, velocity.current.y + deceleration);
+          }
+        }
+        
+        velocity.current.x = Math.max(-maxSpeed, Math.min(maxSpeed, velocity.current.x));
+        velocity.current.y = Math.max(-maxSpeed, Math.min(maxSpeed, velocity.current.y));
+
+        let newX = prev.x;
+        let newY = prev.y;
+
+        // Проверка коллизий по горизонтали
+        if (velocity.current.x !== 0) {
+          const step = Math.sign(velocity.current.x);
+          let testX = prev.x;
+          for (let i = 0; i < Math.abs(velocity.current.x); i++) {
+            testX += step;
+            if (checkCollision(testX, prev.y)) {
+              testX -= step;
+              velocity.current.x = 0;
+              break;
+            }
+          }
+          newX = testX;
+        }
+
+        // Проверка коллизий по вертикали
+        if (velocity.current.y !== 0) {
+          const step = Math.sign(velocity.current.y);
+          let testY = prev.y;
+          for (let i = 0; i < Math.abs(velocity.current.y); i++) {
+            testY += step;
+            if (checkCollision(newX, testY)) {
+              testY -= step;
+              velocity.current.y = 0;
+              break;
+            }
+          }
+          newY = testY;
+        }
+
+        const currentSpeed = Math.sqrt(velocity.current.x ** 2 + velocity.current.y ** 2);
+        const targetZoom = baseZoom + (currentSpeed / maxSpeed) * (maxZoom - baseZoom);        
+        setCameraZoom(prevZoom => {
+          const zoomDiff = targetZoom - prevZoom;
+          return prevZoom + zoomDiff * zoomSpeed;
+        });
+        
+        const isMoving = Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.y) > 0.1;
+        setIsWalking(isMoving);
+        
+        return { x: newX, y: newY };
+      });
+      
+      animationFrameId.current = requestAnimationFrame(gameLoop);
+    };
+
+    gameLoopRunning.current = true;
+    animationFrameId.current = requestAnimationFrame(gameLoop);
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      gameLoopRunning.current = false;
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+      
+      if (walkAnimationTimer.current) {
+        clearInterval(walkAnimationTimer.current);
+        walkAnimationTimer.current = null;
+      }
+    };
+  }, []);
+
+  // Анимация ходьбы
+  useEffect(() => {
+    if (isWalking) {
+      walkAnimationTimer.current = setInterval(() => {
+        setCurrentFrame(prev => (prev + 1) % frames.length);
+      }, 210);
+    } else {
+      setCurrentFrame(0);
+    }
+
+    return () => {
+      if (walkAnimationTimer.current) {
+        clearInterval(walkAnimationTimer.current);
+        walkAnimationTimer.current = null;
+      }
+    };
+  }, [isWalking]);
+
+  const getCurrentImage = () => {
+    if (!isWalking) {
+      return `/assets/images/walk_animation/static.png`;
+    }
+    const frameIndex = frames[currentFrame];
+    return `/assets/images/walk_animation/${frameIndex}.png`;
+  };
+
+  const combinedScale = scale * cameraZoom;
+
+  return (
+    <div ref={containerRef} className="game-container">
+      <div 
+        className="game-world"
+        style={{
+          width: `${GAME_WIDTH}px`,
+          height: `${GAME_HEIGHT}px`,
+          transform: `scale(${combinedScale})`
+        }}
+      >
+        <img
+          src="/assets/images/background.png"
+          alt="game background"
+          className="background-image"
+          style={{
+            top: position.y,
+            left: position.x
+          }}
+        />
+
+        <div className="character-container">
+          <div className="character-shadow" />
+          <img
+            src={getCurrentImage()}
+            alt="character"
+            className={`character ${facingDirection === 'left' ? 'character-facing-left' : 'character-facing-right'}`}
+            style={{
+              width: `${characterWidth}px`,
+              height: `${characterHeight}px`
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Game;
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useAnimation.ts
+================================================================================
+import { useState, useEffect, useRef } from 'react';
+import { ANIMATION_CONFIG } from '../../constants';
+
+export const useAnimation = (isWalking: boolean) => {
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const animationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isWalking) {
+      animationTimer.current = setInterval(() => {
+        setCurrentFrame(prev => (prev + 1) % ANIMATION_CONFIG.WALK.FRAMES.length);
+      }, ANIMATION_CONFIG.WALK.FRAME_DURATION);
+    } else {
+      setCurrentFrame(0);
+    }
+
+    return () => {
+      if (animationTimer.current) {
+        clearInterval(animationTimer.current);
+        animationTimer.current = null;
+      }
+    };
+  }, [isWalking]);
+
+  const getCurrentFrame = () => {
+    if (!isWalking) {
+      return 0; // static frame index
+    }
+    return ANIMATION_CONFIG.WALK.FRAMES[currentFrame];
+  };
+
+  return { currentFrame: getCurrentFrame() };
+};
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useCamera.ts
+================================================================================
+import { useState, useEffect, useRef } from 'react';
+import type { Velocity } from '../../types';
+import { CAMERA_CONFIG, PHYSICS } from '../../constants';
+
+export const useCamera = () => {
+  const [zoom, setZoom] = useState<number>(CAMERA_CONFIG.BASE_ZOOM);
+  const zoomRef = useRef(zoom);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  const updateCamera = (velocity: Velocity) => {
+    const currentSpeed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+    const targetZoom = CAMERA_CONFIG.BASE_ZOOM + 
+      (currentSpeed / PHYSICS.MAX_SPEED) * (CAMERA_CONFIG.MAX_ZOOM - CAMERA_CONFIG.BASE_ZOOM);
+    
+    setZoom(prevZoom => {
+      const zoomDiff = targetZoom - prevZoom;
+      return prevZoom + zoomDiff * CAMERA_CONFIG.ZOOM_SPEED;
+    });
+  };
+
+  return { zoom, updateCamera };
+};
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useCollisionSystem.ts
+================================================================================
+import { useState, useEffect, useRef } from 'react';
+import type { CollisionSystem } from '../../types';
+import { GAME_CONFIG, ASSET_PATHS } from '../../constants';
+
+export const useCollisionSystem = (): CollisionSystem => {
+  const collisionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const collisionContextRef = useRef<CanvasRenderingContext2D | null>(null);
+  const maskImageRef = useRef<HTMLImageElement | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const backgroundSizeRef = useRef({ width: 0, height: 0 });
+
+  const checkCollision = (x: number, y: number): boolean => {
+    if (!collisionContextRef.current || !isLoaded) {
+      return false;
+    }
+
+    try {
+      const maskWidth = collisionCanvasRef.current?.width || 0;
+      const maskHeight = collisionCanvasRef.current?.height || 0;
+      const bgWidth = backgroundSizeRef.current.width;
+      const bgHeight = backgroundSizeRef.current.height;
+      
+      if (maskWidth === 0 || maskHeight === 0 || bgWidth === 0 || bgHeight === 0) {
+        return false;
+      }
+      
+      const shadowCenterWorldX = GAME_CONFIG.WIDTH / 2;
+      const shadowCenterWorldY = GAME_CONFIG.HEIGHT / 2 + GAME_CONFIG.CHARACTER.HEIGHT / 2 - 10;
+      const bgX = shadowCenterWorldX - x;
+      const bgY = shadowCenterWorldY - y;
+      const scaleX = maskWidth / bgWidth;
+      const scaleY = maskHeight / bgHeight;
+      const maskX = Math.floor(bgX * scaleX);
+      const maskY = Math.floor(bgY * scaleY);
+      
+      if (maskX >= 0 && maskX < maskWidth && maskY >= 0 && maskY < maskHeight) {
+        const pixelData = collisionContextRef.current.getImageData(maskX, maskY, 1, 1).data;
+        const [r, g, b] = pixelData;
+        const isWhite = r === 255 && g === 255 && b === 255;
+        return !isWhite;
+      } else {
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    const loadMask = () => {
+      const maskImage = new Image();
+      maskImageRef.current = maskImage;
+      maskImage.onload = () => {
+        const maskWidth = maskImage.naturalWidth;
+        const maskHeight = maskImage.naturalHeight;
+        const canvas = document.createElement('canvas');
+        canvas.width = maskWidth;
+        canvas.height = maskHeight;
+        collisionCanvasRef.current = canvas;
+        const context = canvas.getContext('2d');
+        
+        if (!context) return;
+        
+        collisionContextRef.current = context;
+        collisionContextRef.current.drawImage(maskImage, 0, 0, maskWidth, maskHeight);
+        setIsLoaded(true);
+      };
+      maskImage.src = ASSET_PATHS.BACKGROUND_MASK;
+    };
+
+    const bgImage = new Image();
+    bgImage.onload = () => {
+      backgroundSizeRef.current = {
+        width: bgImage.naturalWidth,
+        height: bgImage.naturalHeight
+      };
+      loadMask();
+    };
+    bgImage.src = ASSET_PATHS.BACKGROUND;
+  }, []);
+
+  return { checkCollision, isLoaded };
+};
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useGameLoop.ts
+================================================================================
+import { useEffect, useRef } from 'react';
+import type { Position, Velocity, Keys } from '../../types';
+import { PHYSICS } from '../../constants';
+
+interface GameLoopProps {
+  keys: Keys;
+  onUpdate: (position: Position, velocity: Velocity, isMoving: boolean) => void;
+  checkCollision: (x: number, y: number) => boolean;
+}
+
+export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) => {
+  const animationFrameId = useRef<number | null>(null);
+  const gameLoopRunning = useRef(false);
+  const velocity = useRef<Velocity>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const gameLoop = () => {
+      if (!gameLoopRunning.current) return;
+
+      let targetVelocityX = 0;
+      let targetVelocityY = 0;
+      
+      if (keys.d) targetVelocityX = -PHYSICS.MAX_SPEED;
+      if (keys.a) targetVelocityX = PHYSICS.MAX_SPEED;
+      if (keys.s) targetVelocityY = -PHYSICS.MAX_SPEED;
+      if (keys.w) targetVelocityY = PHYSICS.MAX_SPEED;
+
+      // Horizontal acceleration
+      if (targetVelocityX !== 0) {
+        if (Math.abs(velocity.current.x) < Math.abs(targetVelocityX)) {
+          velocity.current.x += Math.sign(targetVelocityX) * PHYSICS.ACCELERATION;
+        }
+      } else {
+        if (velocity.current.x > 0) {
+          velocity.current.x = Math.max(0, velocity.current.x - PHYSICS.DECELERATION);
+        } else if (velocity.current.x < 0) {
+          velocity.current.x = Math.min(0, velocity.current.x + PHYSICS.DECELERATION);
+        }
+      }
+
+      // Vertical acceleration
+      if (targetVelocityY !== 0) {
+        if (Math.abs(velocity.current.y) < Math.abs(targetVelocityY)) {
+          velocity.current.y += Math.sign(targetVelocityY) * PHYSICS.ACCELERATION;
+        }
+      } else {
+        if (velocity.current.y > 0) {
+          velocity.current.y = Math.max(0, velocity.current.y - PHYSICS.DECELERATION);
+        } else if (velocity.current.y < 0) {
+          velocity.current.y = Math.min(0, velocity.current.y + PHYSICS.DECELERATION);
+        }
+      }
+      
+      velocity.current.x = Math.max(-PHYSICS.MAX_SPEED, Math.min(PHYSICS.MAX_SPEED, velocity.current.x));
+      velocity.current.y = Math.max(-PHYSICS.MAX_SPEED, Math.min(PHYSICS.MAX_SPEED, velocity.current.y));
+
+      let newX = 0;
+      let newY = 0;
+
+      // Collision detection for horizontal movement
+      if (velocity.current.x !== 0) {
+        const step = Math.sign(velocity.current.x);
+        let testX = 0;
+        for (let i = 0; i < Math.abs(velocity.current.x); i++) {
+          testX += step;
+          if (checkCollision(testX, 0)) {
+            testX -= step;
+            velocity.current.x = 0;
+            break;
+          }
+        }
+        newX = testX;
+      }
+
+      // Collision detection for vertical movement
+      if (velocity.current.y !== 0) {
+        const step = Math.sign(velocity.current.y);
+        let testY = 0;
+        for (let i = 0; i < Math.abs(velocity.current.y); i++) {
+          testY += step;
+          if (checkCollision(newX, testY)) {
+            testY -= step;
+            velocity.current.y = 0;
+            break;
+          }
+        }
+        newY = testY;
+      }
+
+      const isMoving = Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.y) > 0.1;
+      onUpdate({ x: newX, y: newY }, velocity.current, isMoving);
+
+      animationFrameId.current = requestAnimationFrame(gameLoop);
+    };
+
+    gameLoopRunning.current = true;
+    animationFrameId.current = requestAnimationFrame(gameLoop);
+
+    return () => {
+      gameLoopRunning.current = false;
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = null;
+      }
+    };
+  }, [keys, onUpdate, checkCollision]);
+
+  return { velocity: velocity.current };
+};
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useGameScale.ts
+================================================================================
+import { useState, useEffect, useRef } from 'react';
+import type { GameScale } from '../../types';
+import { GAME_CONFIG } from '../../constants';
+
+export const useGameScale = (): GameScale => {
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (containerRef.current) {
+        const container = containerRef.current;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        
+        if (containerWidth > 0 && containerHeight > 0) {
+          const scaleX = containerWidth / GAME_CONFIG.WIDTH;
+          const scaleY = containerHeight / GAME_CONFIG.HEIGHT;
+          const newScale = Math.min(scaleX, scaleY);
+          setScale(newScale);
+        }
+      }
+    };
+
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
+  return { scale, containerRef: containerRef as React.RefObject<HTMLDivElement> };
+};
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useKeyboardControls.ts
+================================================================================
+import { useState, useEffect, useRef } from 'react';
+import type { Keys } from '../../types';
+import { KEY_MAPPINGS, PREVENT_DEFAULT_KEYS } from '../../constants';
+
+export const useKeyboardControls = () => {
+  const [direction, setDirection] = useState<'right' | 'left'>('right');
+  const keys = useRef<Keys>({ w: false, a: false, s: false, d: false });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (PREVENT_DEFAULT_KEYS.includes(event.key as any)) {
+        event.preventDefault();
+      }
+
+      const key = event.key.toLowerCase();
+
+      if (KEY_MAPPINGS.RIGHT.includes(key as any)) {
+        keys.current.d = true;
+        setDirection('right');
+      } else if (KEY_MAPPINGS.LEFT.includes(key as any)) {
+        keys.current.a = true;
+        setDirection('left');
+      } else if (KEY_MAPPINGS.DOWN.includes(key as any)) {
+        keys.current.s = true;
+        keys.current.w = false;
+      } else if (KEY_MAPPINGS.UP.includes(key as any)) {
+        keys.current.w = true;
+        keys.current.s = false;
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+
+      if (KEY_MAPPINGS.RIGHT.includes(key as any)) {
+        keys.current.d = false;
+      } else if (KEY_MAPPINGS.LEFT.includes(key as any)) {
+        keys.current.a = false;
+      } else if (KEY_MAPPINGS.DOWN.includes(key as any)) {
+        keys.current.s = false;
+      } else if (KEY_MAPPINGS.UP.includes(key as any)) {
+        keys.current.w = false;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  return { keys: keys.current, direction, setDirection };
+};
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\index.ts
+================================================================================
+export * from './game/useGameScale';
+export * from './game/useKeyboardControls';
+export * from './game/useCollisionSystem';
+export * from './game/useAnimation';
+export * from './game/useCamera';
+export * from './game/useGameLoop';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\types\game.ts
+================================================================================
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface Velocity {
+  x: number;
+  y: number;
+}
+
+export interface Keys {
+  w: boolean;
+  a: boolean;
+  s: boolean;
+  d: boolean;
+}
+
+export type Direction = 'left' | 'right';
+
+export interface CharacterState {
+  position: Position;
+  velocity: Velocity;
+  direction: Direction;
+  isWalking: boolean;
+  currentFrame: number;
+}
+
+export interface GameScale {
+  scale: number;
+  containerRef: React.RefObject<HTMLDivElement>;
+}
+
+export interface CollisionSystem {
+  checkCollision: (x: number, y: number) => boolean;
+  isLoaded: boolean;
+}
+
+export interface AnimationConfig {
+  frames: number[];
+  frameDuration: number;
+  loop: boolean;
+}
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\types\index.ts
+================================================================================
+export * from './game';
+--------------------------------------------------------------------------------
+
