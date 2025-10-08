@@ -1,3 +1,45 @@
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Background\Background.tsx
+================================================================================
+import React from 'react';
+import './Background.css';
+
+const Background: React.FC = () => {
+  return (
+    <div className="background-container">
+      <div>Background Component - TODO</div>
+    </div>
+  );
+};
+
+export default Background;
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Background\index.ts
+================================================================================
+export { default } from './Background';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Character\Character.tsx
+================================================================================
+import React from 'react';
+import './Character.css';
+
+const Character: React.FC = () => {
+  return (
+    <div className="character-container">
+      <div>Character Component - TODO</div>
+    </div>
+  );
+};
+
+export default Character;
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Character\index.ts
+================================================================================
+export { default } from './Character';
+--------------------------------------------------------------------------------
+
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Game\Game.tsx
 ================================================================================
 import React, { useState } from 'react';
@@ -50,6 +92,7 @@ const Game: React.FC = () => {
           transform: `scale(${combinedScale})`
         }}
       >
+        {/* фон */}
         <img
           src={ASSET_PATHS.BACKGROUND}
           alt="game background"
@@ -59,9 +102,11 @@ const Game: React.FC = () => {
             left: position.x
           }}
         />
-
+        {/* персонаж с анимацией и тенью */}
         <div className="character-container">
+          {/* тень */}
           <div className="character-shadow" />
+          {/* персонаж */}
           <img
             src={getCurrentImage()}
             alt="character"
@@ -639,7 +684,7 @@ export const useCollisionSystem = (): CollisionSystem => {
 ================================================================================
 import { useEffect, useRef } from 'react';
 import type { Position, Velocity, Keys } from '../../types';
-import { PHYSICS } from '../../constants';
+import { PHYSICS, GAME_CONFIG } from '../../constants';
 
 interface GameLoopProps {
   keys: Keys;
@@ -651,6 +696,10 @@ export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) =
   const animationFrameId = useRef<number | null>(null);
   const gameLoopRunning = useRef(false);
   const velocity = useRef<Velocity>({ x: 0, y: 0 });
+  const position = useRef<Position>({ 
+    x: GAME_CONFIG.BACKGROUND.INITIAL_X, 
+    y: GAME_CONFIG.BACKGROUND.INITIAL_Y 
+  });
 
   useEffect(() => {
     const gameLoop = () => {
@@ -664,7 +713,6 @@ export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) =
       if (keys.s) targetVelocityY = -PHYSICS.MAX_SPEED;
       if (keys.w) targetVelocityY = PHYSICS.MAX_SPEED;
 
-      // Horizontal acceleration
       if (targetVelocityX !== 0) {
         if (Math.abs(velocity.current.x) < Math.abs(targetVelocityX)) {
           velocity.current.x += Math.sign(targetVelocityX) * PHYSICS.ACCELERATION;
@@ -677,7 +725,6 @@ export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) =
         }
       }
 
-      // Vertical acceleration
       if (targetVelocityY !== 0) {
         if (Math.abs(velocity.current.y) < Math.abs(targetVelocityY)) {
           velocity.current.y += Math.sign(targetVelocityY) * PHYSICS.ACCELERATION;
@@ -693,16 +740,15 @@ export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) =
       velocity.current.x = Math.max(-PHYSICS.MAX_SPEED, Math.min(PHYSICS.MAX_SPEED, velocity.current.x));
       velocity.current.y = Math.max(-PHYSICS.MAX_SPEED, Math.min(PHYSICS.MAX_SPEED, velocity.current.y));
 
-      let newX = 0;
-      let newY = 0;
+      let newX = position.current.x;
+      let newY = position.current.y;
 
-      // Collision detection for horizontal movement
       if (velocity.current.x !== 0) {
         const step = Math.sign(velocity.current.x);
-        let testX = 0;
+        let testX = position.current.x;
         for (let i = 0; i < Math.abs(velocity.current.x); i++) {
           testX += step;
-          if (checkCollision(testX, 0)) {
+          if (checkCollision(testX, position.current.y)) {
             testX -= step;
             velocity.current.x = 0;
             break;
@@ -711,10 +757,9 @@ export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) =
         newX = testX;
       }
 
-      // Collision detection for vertical movement
       if (velocity.current.y !== 0) {
         const step = Math.sign(velocity.current.y);
-        let testY = 0;
+        let testY = position.current.y;
         for (let i = 0; i < Math.abs(velocity.current.y); i++) {
           testY += step;
           if (checkCollision(newX, testY)) {
@@ -726,7 +771,9 @@ export const useGameLoop = ({ keys, onUpdate, checkCollision }: GameLoopProps) =
         newY = testY;
       }
 
+      position.current = { x: newX, y: newY };
       const isMoving = Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.y) > 0.1;
+      
       onUpdate({ x: newX, y: newY }, velocity.current, isMoving);
 
       animationFrameId.current = requestAnimationFrame(gameLoop);
