@@ -1,13 +1,39 @@
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Background\Background.tsx
 ================================================================================
-import React from 'react';
+import { useCollisionSystem, useGameLoop } from '../../hooks';
+import { useGame } from '../../contexts/GameContext';
+import { ASSET_PATHS } from '../../constants';
+import type { Position } from '../../types';
 import './Background.css';
 
 const Background: React.FC = () => {
+  const { gameState, setGameState } = useGame();
+  const { checkCollision, isLoaded } = useCollisionSystem();
+
+  const handleGameUpdate = (newPosition: Position, _velocity: { x: number; y: number }, isMoving: boolean) => {
+    setGameState(prev => ({
+      ...prev,
+      position: newPosition,
+      isWalking: isMoving
+    }));
+  };
+
+  useGameLoop({
+    keys: gameState.keys,
+    onUpdate: handleGameUpdate,
+    checkCollision: isLoaded ? checkCollision : () => false
+  });
+
   return (
-    <div className="background-container">
-      <div>Background Component - TODO</div>
-    </div>
+    <img
+      src={ASSET_PATHS.BACKGROUND}
+      alt="game background"
+      className="background-image"
+      style={{
+        top: gameState.position.y,
+        left: gameState.position.x
+      }}
+    />
   );
 };
 
@@ -16,18 +42,40 @@ export default Background;
 
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Background\index.ts
 ================================================================================
-export { default } from './Background';
+export { default } from './Background.tsx';
 --------------------------------------------------------------------------------
 
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Character\Character.tsx
 ================================================================================
-import React from 'react';
+import { useKeyboardControls, useAnimation } from '../../hooks';
+import { useGame } from '../../contexts/GameContext';
+import { GAME_CONFIG, ASSET_PATHS } from '../../constants';
 import './Character.css';
 
 const Character: React.FC = () => {
+  const { direction } = useKeyboardControls();
+  const { gameState } = useGame();
+  const { currentFrame } = useAnimation(gameState.isWalking);
+
+  const getCurrentImage = () => {
+    if (!gameState.isWalking) {
+      return ASSET_PATHS.CHARACTER.STATIC;
+    }
+    return ASSET_PATHS.CHARACTER.FRAME(currentFrame);
+  };
+
   return (
     <div className="character-container">
-      <div>Character Component - TODO</div>
+      <div className="character-shadow" />
+      <img
+        src={getCurrentImage()}
+        alt="character"
+        className={`character ${direction === 'left' ? 'character-facing-left' : 'character-facing-right'}`}
+        style={{
+          width: `${GAME_CONFIG.CHARACTER.WIDTH}px`,
+          height: `${GAME_CONFIG.CHARACTER.HEIGHT}px`
+        }}
+      />
     </div>
   );
 };
@@ -37,7 +85,7 @@ export default Character;
 
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Character\index.ts
 ================================================================================
-export { default } from './Character';
+export { default } from './Character.tsx';
 --------------------------------------------------------------------------------
 
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Game\Game.tsx
@@ -527,6 +575,188 @@ const Game: React.FC = () => {
 export default Game;
 --------------------------------------------------------------------------------
 
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Objects\index.ts
+================================================================================
+export { default as InteractiveObject } from './InteractiveObject/InteractiveObject';
+export { default as TalkingMouse } from './TalkingMouse/TalkingMouse';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Objects\InteractiveObject\index.ts
+================================================================================
+export { default } from './InteractiveObject';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Objects\InteractiveObject\InteractiveObject.tsx
+================================================================================
+import React from 'react';
+import { useInteractiveObject } from '../../../hooks/objects/useInteractiveObject';
+import { useGame } from '../../../contexts/GameContext';
+import './InteractiveObject.css';
+
+interface InteractiveObjectProps {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  sprite: string;
+  interactionRadius: number;
+  onInteract: () => void;
+  showHint?: boolean;
+  hintText?: string;
+  children?: React.ReactNode | ((isNear: boolean) => React.ReactNode);
+}
+
+export const InteractiveObject: React.FC<InteractiveObjectProps> = ({
+  id,
+  type,
+  position,
+  sprite,
+  interactionRadius,
+  onInteract,
+  showHint = true,
+  hintText = 'Нажми E',
+  children
+}) => {
+  const { gameState } = useGame();
+  const { isNear, canInteract } = useInteractiveObject({
+    objectId: id,
+    position,
+    interactionRadius,
+    onInteract
+  });
+
+  // Компенсация движения фона
+  const objectScreenX = position.x + gameState.position.x;
+  const objectScreenY = position.y + gameState.position.y;
+
+  return (
+    <div 
+      className={`interactive-object interactive-object--${type}`}
+      style={{ 
+        position: 'absolute',
+        left: objectScreenX,
+        top: objectScreenY,
+        transform: 'translate(-50%, -50%)'
+      }}
+    >
+      <img 
+        src={sprite} 
+        alt={id} 
+        className="interactive-object__sprite"
+      />
+      
+      {/* Поддержка render prop */}
+      {children && typeof children === 'function' ? children(isNear) : children}
+      
+      {isNear && showHint && canInteract && (
+        <div className="interactive-object__hint">
+          {hintText}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default InteractiveObject;
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Objects\TalkingMouse\index.ts
+================================================================================
+export { default } from './TalkingMouse';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\components\Objects\TalkingMouse\TalkingMouse.tsx
+================================================================================
+import React from 'react';
+import InteractiveObject from '../InteractiveObject/InteractiveObject';
+import './TalkingMouse.css';
+
+interface TalkingMouseProps {
+  position?: { x: number; y: number };
+  onTalk?: () => void;
+}
+
+export const TalkingMouse: React.FC<TalkingMouseProps> = ({ 
+  position = { x: 300, y: 200 },
+  onTalk = () => console.log("Пи-пи! Я говорящая мышь!")
+}) => {
+  return (
+    <InteractiveObject
+      id="talking_mouse_1"
+      type="npc"
+      position={position}
+      sprite="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='50' height='50' viewBox='0 0 50 50'%3E%3Crect width='50' height='50' fill='%23ff6b6b' rx='10'/%3E%3Ctext x='25' y='30' text-anchor='middle' fill='white' font-size='20'%3E🐭%3C/text%3E%3C/svg%3E"
+      interactionRadius={60}
+      onInteract={onTalk}
+      hintText="Поговорить с мышью"
+    >
+      {/* Теперь это функция, а не JSX */}
+      {(isNear: boolean) => (
+        <div 
+          className="mouse-debug-background"
+          style={{
+            position: 'absolute',
+            top: '-30px',
+            left: '-30px',
+            width: '110px',
+            height: '110px',
+            backgroundColor: isNear ? 'rgba(0, 255, 0, 0.3)' : 'rgba(255, 0, 0, 0.2)',
+            border: `2px dashed ${isNear ? 'green' : 'red'}`,
+            borderRadius: '8px',
+            pointerEvents: 'none',
+            zIndex: -1,
+            transition: 'all 0.3s ease'
+          }}
+        />
+      )}
+    </InteractiveObject>
+  );
+};
+
+export default TalkingMouse;
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\contexts\GameContext.tsx
+================================================================================
+import React, { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { Position, Keys } from '../types';
+
+interface GameState {
+  position: Position;
+  isWalking: boolean;
+  keys: Keys;
+}
+
+interface GameContextType {
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+}
+
+const GameContext = createContext<GameContextType | undefined>(undefined);
+
+export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [gameState, setGameState] = useState<GameState>({
+    position: { x: -180, y: -250 },
+    isWalking: false,
+    keys: { w: false, a: false, s: false, d: false }
+  });
+
+  return (
+    <GameContext.Provider value={{ gameState, setGameState }}>
+      {children}
+    </GameContext.Provider>
+  );
+};
+
+export const useGame = () => {
+  const context = useContext(GameContext);
+  if (context === undefined) {
+    throw new Error('useGame must be used within a GameProvider');
+  }
+  return context;
+};
+--------------------------------------------------------------------------------
+
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useAnimation.ts
 ================================================================================
 import { useState, useEffect, useRef } from 'react';
@@ -834,12 +1064,14 @@ export const useGameScale = (): GameScale => {
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\game\useKeyboardControls.ts
 ================================================================================
 import { useState, useEffect, useRef } from 'react';
+import { useGame } from '../../contexts/GameContext';
 import type { Keys } from '../../types';
 import { KEY_MAPPINGS, PREVENT_DEFAULT_KEYS } from '../../constants';
 
 export const useKeyboardControls = () => {
   const [direction, setDirection] = useState<'right' | 'left'>('right');
-  const keys = useRef<Keys>({ w: false, a: false, s: false, d: false });
+  const { setGameState } = useGame();
+  const keysRef = useRef<Keys>({ w: false, a: false, s: false, d: false });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -848,34 +1080,48 @@ export const useKeyboardControls = () => {
       }
 
       const key = event.key.toLowerCase();
+      const newKeys = { ...keysRef.current };
 
       if (KEY_MAPPINGS.RIGHT.includes(key as any)) {
-        keys.current.d = true;
+        newKeys.d = true;
         setDirection('right');
       } else if (KEY_MAPPINGS.LEFT.includes(key as any)) {
-        keys.current.a = true;
+        newKeys.a = true;
         setDirection('left');
       } else if (KEY_MAPPINGS.DOWN.includes(key as any)) {
-        keys.current.s = true;
-        keys.current.w = false;
+        newKeys.s = true;
+        newKeys.w = false;
       } else if (KEY_MAPPINGS.UP.includes(key as any)) {
-        keys.current.w = true;
-        keys.current.s = false;
+        newKeys.w = true;
+        newKeys.s = false;
       }
+
+      keysRef.current = newKeys;
+      setGameState(prev => ({
+        ...prev,
+        keys: newKeys
+      }));
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
+      const newKeys = { ...keysRef.current };
 
       if (KEY_MAPPINGS.RIGHT.includes(key as any)) {
-        keys.current.d = false;
+        newKeys.d = false;
       } else if (KEY_MAPPINGS.LEFT.includes(key as any)) {
-        keys.current.a = false;
+        newKeys.a = false;
       } else if (KEY_MAPPINGS.DOWN.includes(key as any)) {
-        keys.current.s = false;
+        newKeys.s = false;
       } else if (KEY_MAPPINGS.UP.includes(key as any)) {
-        keys.current.w = false;
+        newKeys.w = false;
       }
+
+      keysRef.current = newKeys;
+      setGameState(prev => ({
+        ...prev,
+        keys: newKeys
+      }));
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -885,9 +1131,13 @@ export const useKeyboardControls = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [setGameState]);
 
-  return { keys: keys.current, direction, setDirection };
+  return { 
+    keys: keysRef.current, 
+    direction, 
+    setDirection 
+  };
 };
 --------------------------------------------------------------------------------
 
@@ -899,6 +1149,63 @@ export * from './game/useCollisionSystem';
 export * from './game/useAnimation';
 export * from './game/useCamera';
 export * from './game/useGameLoop';
+--------------------------------------------------------------------------------
+
+Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\objects\useInteractiveObject.ts
+================================================================================
+import { useState, useEffect } from 'react';
+import { useGame } from '../../contexts/GameContext';
+
+interface UseInteractiveObjectProps {
+  objectId: string;
+  position: { x: number; y: number };
+  interactionRadius: number;
+  onInteract: () => void;
+}
+
+export const useInteractiveObject = ({
+  position,
+  interactionRadius,
+  onInteract
+}: UseInteractiveObjectProps) => {
+  const { gameState } = useGame();
+  const [isNear, setIsNear] = useState(false);
+
+  // Позиция объекта в мировых координатах
+  const objectWorldX = position.x;
+  const objectWorldY = position.y;
+  
+  // Позиция персонажа в мировых координатах
+  // Персонаж всегда в центре экрана, поэтому его мировые координаты = -позиция фона
+  const characterWorldX = -gameState.position.x;
+  const characterWorldY = -gameState.position.y;
+
+  // Проверяем расстояние в мировых координатах
+  useEffect(() => {
+    const distance = Math.sqrt(
+      Math.pow(characterWorldX - objectWorldX, 2) + 
+      Math.pow(characterWorldY - objectWorldY, 2)
+    );
+    setIsNear(distance < interactionRadius);
+  }, [characterWorldX, characterWorldY, objectWorldX, objectWorldY, interactionRadius]);
+
+  // Обрабатываем взаимодействие
+  useEffect(() => {
+    const handleInteraction = (event: KeyboardEvent) => {
+      if (isNear && event.key === 'e') {
+        onInteract();
+      }
+    };
+
+    window.addEventListener('keydown', handleInteraction);
+    return () => window.removeEventListener('keydown', handleInteraction);
+  }, [isNear, onInteract]);
+
+  return { 
+    isNear, 
+    canInteract: isNear 
+  };
+};
 --------------------------------------------------------------------------------
 
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\types\game.ts

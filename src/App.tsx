@@ -2,6 +2,7 @@ import { useGameScale, useCamera } from './hooks';
 import { GameProvider } from './contexts/GameContext';
 import Character from './components/Character/Character';
 import Background from './components/Background/Background';
+import { TalkingMouse } from './components/Objects';
 import './App.css';
 
 function App() {
@@ -16,6 +17,10 @@ function App() {
           <div className={`game-world scale-${Math.round(combinedScale * 100)}`}>
             <Background />
             <Character />
+            <TalkingMouse 
+              position={{ x: 1400, y: 800 }}
+              onTalk={() => console.log("Мышь говорит!")}
+            />
           </div>
         </div>
       </div>
