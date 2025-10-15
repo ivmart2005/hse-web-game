@@ -16,16 +16,12 @@ export const useInteractiveObject = ({
   const { gameState } = useGame();
   const [isNear, setIsNear] = useState(false);
 
-  // Позиция объекта в мировых координатах
   const objectWorldX = position.x;
   const objectWorldY = position.y;
   
-  // Позиция персонажа в мировых координатах
-  // Персонаж всегда в центре экрана, поэтому его мировые координаты = -позиция фона
   const characterWorldX = -gameState.position.x;
   const characterWorldY = -gameState.position.y;
 
-  // Проверяем расстояние в мировых координатах
   useEffect(() => {
     const distance = Math.sqrt(
       Math.pow(characterWorldX - objectWorldX, 2) + 
@@ -34,7 +30,6 @@ export const useInteractiveObject = ({
     setIsNear(distance < interactionRadius);
   }, [characterWorldX, characterWorldY, objectWorldX, objectWorldY, interactionRadius]);
 
-  // Обрабатываем взаимодействие
   useEffect(() => {
     const handleInteraction = (event: KeyboardEvent) => {
       if (isNear && event.key === 'e') {

@@ -24,7 +24,7 @@ export const useAnimation = (isWalking: boolean) => {
 
   const getCurrentFrame = () => {
     if (!isWalking) {
-      return 0; // static frame index
+      return 0;
     }
     return ANIMATION_CONFIG.WALK.FRAMES[currentFrame];
   };
