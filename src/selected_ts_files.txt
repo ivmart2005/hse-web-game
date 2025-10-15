@@ -62,10 +62,8 @@ const Character: React.FC = () => {
   const { currentFrame } = useAnimation(gameState.isWalking);
   const { loaded, loadingProgress, getStaticSprite, getWalkSprite } = useSpriteManager();
 
-  // Создаем canvas для отрисовки спрайтов из памяти
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Отрисовываем спрайт на canvas при изменении кадра
   useEffect(() => {
     if (!loaded || !canvasRef.current) return;
 
@@ -73,21 +71,17 @@ const Character: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Очищаем canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Получаем спрайт из памяти
     const sprite = gameState.isWalking 
       ? getWalkSprite(currentFrame)
       : getStaticSprite();
 
-    // Отрисовываем спрайт
     if (sprite) {
       ctx.drawImage(sprite, 0, 0, canvas.width, canvas.height);
     }
   }, [loaded, gameState.isWalking, currentFrame, getStaticSprite, getWalkSprite]);
 
-  // Показываем загрузку
   if (!loaded) {
     return (
       <div className="character-loading">
@@ -814,7 +808,7 @@ export const useAnimation = (isWalking: boolean) => {
 
   const getCurrentFrame = () => {
     if (!isWalking) {
-      return 0; // static frame index
+      return 0;
     }
     return ANIMATION_CONFIG.WALK.FRAMES[currentFrame];
   };
@@ -1200,16 +1194,12 @@ export const useInteractiveObject = ({
   const { gameState } = useGame();
   const [isNear, setIsNear] = useState(false);
 
-  // Позиция объекта в мировых координатах
   const objectWorldX = position.x;
   const objectWorldY = position.y;
   
-  // Позиция персонажа в мировых координатах
-  // Персонаж всегда в центре экрана, поэтому его мировые координаты = -позиция фона
   const characterWorldX = -gameState.position.x;
   const characterWorldY = -gameState.position.y;
 
-  // Проверяем расстояние в мировых координатах
   useEffect(() => {
     const distance = Math.sqrt(
       Math.pow(characterWorldX - objectWorldX, 2) + 
@@ -1218,7 +1208,6 @@ export const useInteractiveObject = ({
     setIsNear(distance < interactionRadius);
   }, [characterWorldX, characterWorldY, objectWorldX, objectWorldY, interactionRadius]);
 
-  // Обрабатываем взаимодействие
   useEffect(() => {
     const handleInteraction = (event: KeyboardEvent) => {
       if (isNear && event.key === 'e') {
@@ -1239,7 +1228,6 @@ export const useInteractiveObject = ({
 
 Файл: C:\Users\Дом\Desktop\web курс вшэ\project\my-react-app\src\hooks\useSpriteManager.ts
 ================================================================================
-// hooks/useSpriteManager.ts
 import { useRef, useEffect, useState } from 'react';
 import { ASSET_PATHS, ANIMATION_CONFIG } from '../constants';
 
@@ -1290,7 +1278,6 @@ export const useSpriteManager = () => {
     loaded,
     loadingProgress,
     getSprite,
-    // Удобные геттеры
     getStaticSprite: () => getSprite('static'),
     getWalkSprite: (frame: number) => getSprite(`frame_${frame}`)
   };
